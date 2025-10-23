@@ -11,6 +11,7 @@ UEchoRecorderComponent::UEchoRecorderComponent()
     RecordingInterval = 0.033f; // ~30fps ��ȭ
     TimeSinceLastRecord = 0.0f;
     CurrentPlaybackIndex = 0;
+    StartTimeOffset = 0.0f;
 }
 
 void UEchoRecorderComponent::BeginPlay()
@@ -144,5 +145,69 @@ void UEchoRecorderComponent::RecordActionEvent(FString ActionName)
     if (bIsRecordingMode && GameInstance)
     {
         GameInstance->RecordAction(ActionName);
+    }
+}
+
+void UEchoRecorderComponent::UpdatePlaybackTime(float MasterTime)
+{
+    if (!bIsPlaybackMode || PlaybackData.RecordedTransforms.Num() == 0)
+    {
+        return;
+    }
+
+    // 이 메아리의 상대 시간 계산
+    float RelativeTime = MasterTime - StartTimeOffset;
+
+    // 녹화 시작 전이면 대기
+    if (RelativeTime < 0.0f)
+    {
+        return;
+    }
+
+    // 녹화가 끝났으면 마지막 위치에 고정
+    if (RelativeTime > PlaybackData.TotalDuration)
+    {
+        if (PlaybackData.RecordedTransforms.Num() > 0)
+        {
+            int32 LastIndex = PlaybackData.RecordedTransforms.Num() - 1;
+            GetOwner()->SetActorTransform(PlaybackData.RecordedTransforms[LastIndex]);
+        }
+        return;
+    }
+
+    // RelativeTime에 해당하는 프레임 찾기
+    int32 FrameIndex = 0;
+    for (int32 i = 0; i < PlaybackData.RecordedTimestamps.Num() - 1; i++)
+    {
+        if (PlaybackData.RecordedTimestamps[i] <= RelativeTime &&
+            RelativeTime < PlaybackData.RecordedTimestamps[i + 1])
+        {
+            FrameIndex = i;
+            break;
+        }
+    }
+
+    // 두 프레임 사이 보간
+    if (FrameIndex < PlaybackData.RecordedTransforms.Num() - 1)
+    {
+        float T1 = PlaybackData.RecordedTimestamps[FrameIndex];
+        float T2 = PlaybackData.RecordedTimestamps[FrameIndex + 1];
+        float TimeDiff = T2 - T1;
+
+        if (TimeDiff > 0.0f)
+        {
+            float Alpha = (RelativeTime - T1) / TimeDiff;
+            Alpha = FMath::Clamp(Alpha, 0.0f, 1.0f);
+
+            FTransform Transform1 = PlaybackData.RecordedTransforms[FrameIndex];
+            FTransform Transform2 = PlaybackData.RecordedTransforms[FrameIndex + 1];
+
+            FTransform Interpolated;
+            Interpolated.SetLocation(FMath::Lerp(Transform1.GetLocation(), Transform2.GetLocation(), Alpha));
+            Interpolated.SetRotation(FQuat::Slerp(Transform1.GetRotation(), Transform2.GetRotation(), Alpha));
+            Interpolated.SetScale3D(Transform1.GetScale3D());
+
+            GetOwner()->SetActorTransform(Interpolated);
+        }
     }
 }

@@ -60,6 +60,12 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Echo")
     void RecordActionEvent(FString ActionName);
 
+    // 새로 추가 ↓↓↓
+    UFUNCTION(BlueprintCallable, Category = "Echo")
+    void UpdatePlaybackTime(float MasterTime);
+
+    UPROPERTY(BlueprintReadWrite, Category = "Echo")
+    float StartTimeOffset;
 protected:
     virtual void BeginPlay() override;
 
